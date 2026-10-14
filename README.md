@@ -45,3 +45,7 @@ A extração do PDF e as regras de lançamentos ainda precisam ser homologadas c
 
 ## Verificação obrigatória de deploy v0.6
 Após publicar o commit na branch monitorada pelo Netlify, abra a página em janela anônima. Na área de importação deve aparecer `v0.6 · XLS 14/10 · leitor por células`. Se o erro exato `Campos finais não identificados em ...` voltar ao importar XLS, a página ainda é de uma versão anterior (pois o leitor XLS v0.6 não emite essa frase). Verifique a URL da página, a branch e o Deploy log. Uma importação XLS v0.6 pode emitir erros indicando campos faltantes — nesse caso envie 5 linhas do relatório e o novo diagnóstico.
+
+
+## v0.7
+A importação XLS detecta registros pelo código de entidade, lê o campo 3/7 como filial, localiza a duplicata e agrupa linhas de continuação. Os 7 campos numéricos após a terceira data formam valor, juros, despesa, banco, operação, ATS e conta. Antes de contabilizar, confira os totais e registros com o original.
