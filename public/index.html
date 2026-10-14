@@ -43,45 +43,66 @@ function parseDocument(t){warnings=[];let ls=t.split(/\r?\n/).map(x=>x.replace(/
 // Planilhas do relatório de duplicatas: mesmas regras de contabilização do PDF.
 // O cabeçalho é localizado dinamicamente para evitar depender de letras fixas de coluna.
 async function excelToRecords(f){
-  if(!window.XLSX)throw new Error('Biblioteca Excel indisponível. Verifique sua conexão com a internet.');
+  if(!window.XLSX)throw new Error('Biblioteca Excel indisponível. Verifique a conexão.');
   warnings=[];
   const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:false,cellNF:true});
-  let results=[], sheetsSeen=0;
-  for(const name of wb.SheetNames){
-    const sh=wb.Sheets[name];
-    const rows=XLSX.utils.sheet_to_json(sh,{header:1,defval:'',raw:false,blankrows:false});
-    if(!rows.length)continue;
-    const standard=rows.findIndex(r=>r.some(c=>/COD\.?\s*ENT/i.test(String(c)))&&r.some(c=>/PAGAMENTO/i.test(String(c))));
-    if(standard>=0){
-      const headers=rows[standard].map(v=>clean(v).replace(/[^A-Z0-9]/g,''));
-      const find=(...names)=>headers.findIndex(v=>names.includes(v));
-      const idx={ent:find('CODENT'),doc:find('NDUP','NDUPL','NDUPLICATA'),nome:find('NOME'),filial:find('FILIAL'),emissao:find('EMISSAO'),vencto:find('VENCTO','VENCIMENTO'),pagamento:find('PAGAMENTO'),valor:find('VALDUPL','VALDUP','VALOR'),juros:find('JURDES','JUROSDESCONTOS'),desp:find('DESP','DESPESAS'),banco:find('BANCO'),op:find('OP'),ats:find('ATS'),conta:find('CONTA')};
-      // A planilha pode ter colunas mescladas; estratégia secundária coleta o texto das linhas.
-      if(idx.ent>=0&&idx.doc>=0&&idx.nome>=0&&idx.pagamento>=0&&idx.valor>=0&&idx.banco>=0){
-        let accepted=0, skipped=0;
-        for(let i=standard+1;i<rows.length;i++){
-          const row=rows[i]; const get=k=>idx[k]<0?'':String(row[idx[k]]??'').trim();
-          const ent=get('ent');if(!/^[BC]\d{6}$/i.test(ent))continue;
-          const doc=get('doc');let nome=get('nome');const data=dateStr(get('pagamento'));
-          const valor=number(get('valor'));const banco=get('banco').replace(/\.0$/,'');
-          if(!doc||!data||!valor||!banco){skipped++;continue;}
-          results.push({filial:get('filial')||'3',entidade:ent,doc,nome,pagamento:data,
-            emissao:dateStr(get('emissao')),vencimento:dateStr(get('vencto')),
-            valor,juros:number(get('juros')),desp:number(get('desp')),banco,
-            op:get('op'),ats:get('ats'),conta:get('conta'),raw:row.join(' | '),review:'extraído Excel'});
-          accepted++;
-        }
-        if(accepted){if(skipped)warnings.push(`${name}: ${skipped} linha(s) de duplicatas com dados obrigatórios ausentes; revise o arquivo de origem.`);sheetsSeen++;continue;}
+  const results=[];
+  const norm=v=>clean(String(v??'')).replace(/[^A-Z0-9]/g,'');
+  const present=v=>v!==undefined&&v!==null&&String(v).trim()!=='';
+  const asDate=v=>{
+    if(v instanceof Date&&!isNaN(v))return String(v.getDate()).padStart(2,'0')+'/'+String(v.getMonth()+1).padStart(2,'0')+'/'+v.getFullYear();
+    if(typeof v==='number'&&v>20000&&v<90000){const d=XLSX.SSF.parse_date_code(v);if(d)return String(d.d).padStart(2,'0')+'/'+String(d.m).padStart(2,'0')+'/'+d.y;}
+    let x=String(v??'').trim();if(/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(x)){let p=x.split('/');return p[0].padStart(2,'0')+'/'+p[1].padStart(2,'0')+'/'+(p[2].length===2?'20'+p[2]:p[2]);}
+    if(/^\d{4}-\d{2}-\d{2}/.test(x))return x.slice(8,10)+'/'+x.slice(5,7)+'/'+x.slice(0,4);
+    return '';
+  };
+  const amt=v=>{if(typeof v==='number')return v;let t=String(v??'').replace(/R\$|\s/g,'');if(!t)return 0;if(t.includes(','))t=t.replace(/\./g,'').replace(',','.');else if(/^\d{1,3}(\.\d{3})+$/.test(t))t=t.replace(/\./g,'');return Number(t)||0;};
+  const cell=(sheet,r,c)=>{if(c<0)return '';const x=sheet[XLSX.utils.encode_cell({r,c})];return x?x.v:''};
+  const shown=(sheet,r,c)=>{if(c<0)return '';const x=sheet[XLSX.utils.encode_cell({r,c})];return x?String(x.w??x.v??'').trim():''};
+  const columns={ent:['CODENT','CODENTIDADE','CODIGOENTIDADE'],doc:['DUP','NDUP','NDUPL','NDUPLICATA','NUMDUP'],nome:['NOME','CLIENTE','PARTICIPANTE'],emissao:['EMISSAO'],vencto:['VENCTO','VENCIMENTO'],pagamento:['PAGAMENTO','DTOPAGAMENTO','DATAPAGAMENTO'],valor:['VALDUPL','VALDUP','VALOR','VALDUPLICATA'],juros:['JURDES','JURDESCONTO','JUROSDESCONTOS'],desp:['DESP','DESPESAS'],banco:['BANCO'],op:['OP'],ats:['ATS'],conta:['CONTA'],filial:['FILIAL']};
+  for(const sheetName of wb.SheetNames){
+    const sh=wb.Sheets[sheetName];if(!sh['!ref'])continue;
+    const range=XLSX.utils.decode_range(sh['!ref']);
+    // Os XLS do ERP possuem colunas com vazios e cabeçalhos em células independentes.
+    // Não utilizar sheet_to_json(blankrows:false): ele perde a posição original das linhas.
+    let header=-1,idx={},score=-1;
+    const limit=Math.min(range.e.r,range.s.r+100);
+    for(let rr=range.s.r;rr<=limit;rr++){
+      let tokens=[];for(let c=range.s.c;c<=range.e.c;c++){const t=norm(shown(sh,rr,c));if(t)tokens.push({c,t});}
+      let candidate={};for(const [key,aliases] of Object.entries(columns)){
+        let found=tokens.find(x=>aliases.includes(x.t));
+        if(!found&&key==='ent')found=tokens.find(x=>x.t.startsWith('CODENT'));
+        if(!found&&key==='doc')found=tokens.find(x=>x.t==='NDUP'||x.t==='DUP');
+        if(found)candidate[key]=found.c;
       }
+      let quality=['ent','doc','nome','pagamento','valor','banco'].filter(k=>candidate[k]!==undefined).length;
+      if(quality>score){score=quality;header=rr;idx=candidate;}
+      if(score===6)break;
     }
-    // Muitos XLS legados contêm células dispostas como a impressão do relatório.
-    // Reutilizamos o MESMO interpretador do PDF em vez de manter regras contábeis duplicadas.
-    const asLines=rows.map(r=>r.map(c=>String(c??'').trim()).filter(Boolean).join(' ')).join('\n');
-    let parsed=parseDocument(asLines);
-    if(parsed.length){results.push(...parsed.map(r=>({...r,review:'extraído Excel'})));sheetsSeen++;}
+    if(score<4){warnings.push(`${sheetName}: cabeçalhos insuficientes para leitura segura (identificados: ${score}/6).`);continue;}
+    // Cabeçalho N. DUP: o número entre COD.ENT e DUP costuma representar filial (3/7).
+    const implicitFilial=idx.filial===undefined&&idx.ent!==undefined&&idx.doc!==undefined&&idx.doc-idx.ent>=2?idx.doc-1:-1;
+    let accepted=0,skipped=0;let examples=[];
+    for(let r=header+1;r<=range.e.r;r++){
+      let cod=shown(sh,r,idx.ent).replace(/\s/g,'');
+      if(!/^[BC]\d{6}$/i.test(cod))continue;
+      const value=k=>idx[k]===undefined?'':cell(sh,r,idx[k]);
+      const display=k=>idx[k]===undefined?'':shown(sh,r,idx[k]);
+      const doc=display('doc').replace(/[;,]+$/,'').trim();
+      const nome=display('nome').trim();
+      const pagamento=asDate(value('pagamento'))||asDate(display('pagamento'));
+      const valor=amt(value('valor'));
+      const banco=display('banco').replace(/\.0$/,'');
+      let filial=idx.filial!==undefined?display('filial'):(implicitFilial>=0?shown(sh,r,implicitFilial):'');
+      if(!filial&&/^[37]$/.test(shown(sh,r,idx.ent+1)))filial=shown(sh,r,idx.ent+1);
+      if(!doc||!nome||!pagamento||!(valor>0)||!banco||!filial){skipped++;if(examples.length<6)examples.push(`${doc||cod}: ${[!doc?'duplicata':null,!nome?'nome':null,!pagamento?'pagamento':null,!(valor>0)?'valor':null,!banco?'banco':null,!filial?'filial':null].filter(Boolean).join(', ')}`);continue;}
+      results.push({filial:String(filial),entidade:cod,doc,nome,pagamento,emissao:asDate(value('emissao')),vencimento:asDate(value('vencto')),valor,juros:amt(value('juros')),desp:amt(value('desp')),banco,op:display('op'),ats:display('ats'),conta:display('conta'),raw:`${sheetName}: linha ${r+1}`,review:'extraído Excel'});
+      accepted++;
+    }
+    if(skipped)warnings.push(`${sheetName}: ${skipped} registro(s) incompletos: ${examples.join(' | ')}. Não exporte antes de conferir.`);
+    if(!accepted){warnings.push(`${sheetName}: 0 registros completos. Cabeçalhos encontrados: ${Object.keys(idx).join(', ')}. Verifique o padrão das datas, valores e a filial.`);}
   }
-  if(!results.length)warnings.push('Nenhuma duplicata reconhecida neste Excel. Verifique cabeçalhos e se há linhas de dados válidas.');
-  // Pendências de extração não são apagadas: impedem uma exportação incompleta.
+  if(!results.length)warnings.unshift('Nenhuma duplicata completa foi reconhecida neste Excel. A exportação foi bloqueada para evitar contabilização incompleta.');
   return results;
 }
 
