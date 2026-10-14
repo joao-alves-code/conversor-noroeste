@@ -56,6 +56,25 @@ function doPost(e) {
   let lock;
   try {
     const p = (e && e.parameter) || {};
+    if (p.action === 'batchUpsert') {
+      let items;try {items=JSON.parse(p.items||'[]')}catch(_){throw new Error('JSON do lote inválido')}
+      if (!Array.isArray(items) || !items.length || items.length > 50) throw new Error('Lote deve ter entre 1 e 50 participantes');
+      const normalized=items.map(r=>({name:normalizeName_(r.name),account:String(r.account||'').trim(),description:String(r.description||'').trim()}));
+      normalized.forEach(r=>{if(!r.name||r.name.length>240||!/^\d{1,25}$/.test(r.account)||r.description.length>500)throw new Error('Dados inválidos para: '+r.name)});
+      lock=LockService.getScriptLock();lock.waitLock(20000);
+      const sh=sheet_(),count=sh.getLastRow();
+      const rows=count>1?sh.getRange(2,1,count-1,4).getValues():[];
+      const index=new Map();rows.forEach((row,i)=>index.set(normalizeName_(row[0]),i));
+      const now=new Date();let created=0,updated=0;
+      // Atualiza todos os cadastros em memória, escrevendo no Sheets em apenas duas chamadas.
+      for(const r of normalized){
+        const data=[r.name,"'"+r.account,r.description,now];
+        if(index.has(r.name)){rows[index.get(r.name)]=data;updated++}
+        else{index.set(r.name,rows.length);rows.push(data);created++}
+      }
+      if(rows.length)sh.getRange(2,1,rows.length,4).setValues(rows);
+      return output_({ok:true,created,updated,count:normalized.length});
+    }
     if (p.action !== 'upsert') throw new Error('Operação inválida');
     const name = normalizeName_(p.name);
     const account = String(p.account || '').trim();

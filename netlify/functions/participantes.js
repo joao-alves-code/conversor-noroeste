@@ -5,15 +5,23 @@ exports.handler=async (event) => {
   if(!['GET','POST'].includes(event.httpMethod))return respond(405,{ok:false,error:'Método não permitido'});
   const url=process.env.GOOGLE_APPS_SCRIPT_URL?.trim();
   if(!validURL(url))return respond(503,{ok:false,error:'GOOGLE_APPS_SCRIPT_URL não configurada ou inválida no Netlify.'});
-  const opts={redirect:'follow',signal:AbortSignal.timeout(25000)};
+  const opts={redirect:'follow',signal:AbortSignal.timeout(55000)};
   let endpoint=url;
   if(event.httpMethod==='GET') {const u=new URL(url);u.searchParams.set('action','list');endpoint=u.toString();opts.method='GET'}
   else {
     let p;try{p=JSON.parse(event.body||'{}')}catch{return respond(400,{ok:false,error:'JSON inválido'})}
+    if(p.action==='batchUpsert'){
+      if(!Array.isArray(p.items)||p.items.length<1||p.items.length>50)return respond(400,{ok:false,error:'Lote inválido (1 a 50 participantes)'});
+      const items=p.items.map(row=>({name:String(row.name||'').trim(),account:String(row.account||'').trim(),description:String(row.description||'').trim()}));
+      if(items.some(x=>!x.name||x.name.length>240||!/^\d{1,25}$/.test(x.account)||x.description.length>500))return respond(400,{ok:false,error:'Participante inválido no lote'});
+      opts.method='POST';opts.headers={'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'};
+      opts.body=new URLSearchParams({action:'batchUpsert',items:JSON.stringify(items)}).toString();
+    } else {
     const name=String(p.name||'').trim(), account=String(p.account||'').trim(), description=String(p.description||'').trim();
     if(p.action!=='upsert'||!name||name.length>240||!/^\d{1,25}$/.test(account)||description.length>500)return respond(400,{ok:false,error:'Dados do participante inválidos'});
     opts.method='POST';opts.headers={'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'};
     opts.body=new URLSearchParams({action:'upsert',name,account,description}).toString();
+    }
   }
   try {
     const r=await fetch(endpoint,opts);

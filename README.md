@@ -53,3 +53,21 @@ A importação XLS detecta registros pelo código de entidade, lê o campo 3/7 c
 
 ## Correção v0.8
 A v0.7 lançava `ReferenceError: valor is not defined` em `excelToRecords` porque a variável declarada era `value`. A v0.8 grava `valor: value` no registro. Nenhuma regra contábil nem Function foi modificada. Ainda requer conferência de quantidade e totais no XLS.
+
+
+## v0.9 — progresso da sincronização
+- Barra de progresso real por cadastro confirmado, botão interromper e retomada segura.
+- Consulta prévia elimina gravações de cadastros já idênticos no Google Sheets.
+- Fila é atualizada após cada resposta HTTP e preservada se houver erro ou interrupção.
+- Consulta final confirma contas gravadas na planilha; divergências voltam para a fila.
+- Cada cadastro ainda usa uma chamada ao Apps Script. Não é envio em lote.
+- O status de progresso é válido apenas enquanto a aba do navegador permanecer aberta.
+
+
+## Versão 1.0 — sincronização em lote
+- HTML envia lotes de até 50 participantes, em lugar de um POST por cadastro.
+- Netlify Function valida e encaminha `batchUpsert`.
+- Apps Script faz atualização de lote em uma única escrita de células.
+- **OBRIGATÓRIO:** substituir o código Apps Script pelo novo `setup/GoogleAppsScript_Noroeste.gs` e publicar uma **nova versão** da implantação web. Depois publicar o repositório no Netlify.
+- Faça primeiro teste com 5 cadastros. A barra avança quando cada lote é confirmado.
+- A sincronização não deve ser disponibilizada em API pública sem autenticação.
