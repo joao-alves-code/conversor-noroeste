@@ -41,3 +41,7 @@ A extração do PDF e as regras de lançamentos ainda precisam ser homologadas c
 - Cache de correspondências e índices de participantes, renderização apenas da aba ativa e busca com debounce.
 - XLS legados: confira sempre contagem de duplicatas, valores e bancos contra o original antes de exportar; formatos muito diferentes podem exigir mapeamento adicional.
 - Deploy: substitua o conteúdo do repositório GitHub por estes arquivos mantendo environment variables Netlify existentes.
+
+
+## Verificação obrigatória de deploy v0.6
+Após publicar o commit na branch monitorada pelo Netlify, abra a página em janela anônima. Na área de importação deve aparecer `v0.6 · XLS 14/10 · leitor por células`. Se o erro exato `Campos finais não identificados em ...` voltar ao importar XLS, a página ainda é de uma versão anterior (pois o leitor XLS v0.6 não emite essa frase). Verifique a URL da página, a branch e o Deploy log. Uma importação XLS v0.6 pode emitir erros indicando campos faltantes — nesse caso envie 5 linhas do relatório e o novo diagnóstico.
