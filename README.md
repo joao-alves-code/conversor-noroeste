@@ -49,3 +49,7 @@ Após publicar o commit na branch monitorada pelo Netlify, abra a página em jan
 
 ## v0.7
 A importação XLS detecta registros pelo código de entidade, lê o campo 3/7 como filial, localiza a duplicata e agrupa linhas de continuação. Os 7 campos numéricos após a terceira data formam valor, juros, despesa, banco, operação, ATS e conta. Antes de contabilizar, confira os totais e registros com o original.
+
+
+## Correção v0.8
+A v0.7 lançava `ReferenceError: valor is not defined` em `excelToRecords` porque a variável declarada era `value`. A v0.8 grava `valor: value` no registro. Nenhuma regra contábil nem Function foi modificada. Ainda requer conferência de quantidade e totais no XLS.
