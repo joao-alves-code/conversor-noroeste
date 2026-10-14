@@ -34,3 +34,10 @@ A extração do PDF e as regras de lançamentos ainda precisam ser homologadas c
 - `/.netlify/functions/diagnostico` = ok:true e variável false → configure environment variable e faça redeploy.
 - `/api/participantes` = 502 → Apps Script /exec não acessível ou script com problema; valide a URL e os permissões.
 - `/api/participantes` = 200 + ok:true → conexão estabelecida.
+
+## Versão 0.5: PDF e Excel + desempenho
+- Entrada: PDF, XLS, XLSX e TXT. XLS e XLSX interpretados no navegador por SheetJS; PDFs via PDF.js. Necessária conexão à internet para bibliotecas CDN.
+- Ambos compartilham as mesmas regras de lançamento e cadastro Google Sheets.
+- Cache de correspondências e índices de participantes, renderização apenas da aba ativa e busca com debounce.
+- XLS legados: confira sempre contagem de duplicatas, valores e bancos contra o original antes de exportar; formatos muito diferentes podem exigir mapeamento adicional.
+- Deploy: substitua o conteúdo do repositório GitHub por estes arquivos mantendo environment variables Netlify existentes.
