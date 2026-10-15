@@ -71,3 +71,6 @@ A v0.7 lançava `ReferenceError: valor is not defined` em `excelToRecords` porqu
 - **OBRIGATÓRIO:** substituir o código Apps Script pelo novo `setup/GoogleAppsScript_Noroeste.gs` e publicar uma **nova versão** da implantação web. Depois publicar o repositório no Netlify.
 - Faça primeiro teste com 5 cadastros. A barra avança quando cada lote é confirmado.
 - A sincronização não deve ser disponibilizada em API pública sem autenticação.
+
+## Revisão v1.1 (15/10/2026)
+Consulte `REVISAO_V1_1.md` para correções do tratamento de erros do leitor Excel e movimentos interfiliais, bem como pendências de homologação com o VBA. Não atribua automaticamente o banco 1 a uma conta sem confirmação contábil.
